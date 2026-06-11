@@ -1,0 +1,16 @@
+{
+  "name": "Smart TV Remote",
+  "short_name": "TV Remote",
+  "description": "Custom remote for my Linux Smart TV",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/32/32386.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

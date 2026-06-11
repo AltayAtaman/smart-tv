@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart TV Remote</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a1a">
+</head>
+<body>
+    <div class="remote-container">
+        <header>
+            <h1>Smart TV</h1>
+        </header>
+
+        <div class="d-pad-container">
+            <button class="btn up" onclick="sendCommand('KEY_PRESS', 'ArrowUp')">▲</button>
+            <div class="middle-row">
+                <button class="btn left" onclick="sendCommand('KEY_PRESS', 'ArrowLeft')">◀</button>
+                <button class="btn ok" onclick="sendCommand('KEY_PRESS', 'Enter')">OK</button>
+                <button class="btn right" onclick="sendCommand('KEY_PRESS', 'ArrowRight')">▶</button>
+            </div>
+            <button class="btn down" onclick="sendCommand('KEY_PRESS', 'ArrowDown')">▼</button>
+        </div>
+
+        <div class="playback-controls">
+            <button class="btn-secondary" onclick="sendCommand('BACK')">Back</button>
+            <button class="btn-secondary" onclick="sendCommand('RELOAD')">Reload</button>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search / Type...">
+            <button class="btn-action" onclick="sendText()">Send</button>
+        </div>
+
+        <div class="quick-launch">
+            <button class="btn-launch youtube" onclick="navigate('https://www.youtube.com/tv')">YouTube</button>
+            <button class="btn-launch tv" onclick="navigate('https://www.google.com')">Live TV</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
+</body>
+</html>
