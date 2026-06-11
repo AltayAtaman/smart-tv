@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const puppeteer = require('puppeteer');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,8 +18,28 @@ let browser;
 let page;
 
 async function launchBrowser() {
+    // Search for a system-installed browser as a fallback
+    const executablePaths = [
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome-stable',
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+    ];
+    
+    let executablePath = null;
+    for (const p of executablePaths) {
+        if (fs.existsSync(p)) {
+            executablePath = p;
+            console.log(`Found system browser at: ${executablePath}`);
+            break;
+        }
+    }
+
     browser = await puppeteer.launch({
         headless: false,
+        executablePath: executablePath, // Use system browser if found
         args: [
             '--start-fullscreen',
             '--kiosk', // Optional: removes browser UI
