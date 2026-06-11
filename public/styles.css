@@ -8,6 +8,7 @@ body {
     align-items: center;
     height: 100vh;
     touch-action: manipulation;
+    overflow: hidden;
 }
 
 .remote-container {
@@ -15,11 +16,60 @@ body {
     max-width: 400px;
     padding: 20px;
     text-align: center;
+    position: relative;
+}
+
+header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 30px;
+    position: relative;
 }
 
 h1 {
     font-weight: 300;
-    margin-bottom: 30px;
+    margin: 0;
+}
+
+.btn-settings {
+    position: absolute;
+    right: 0;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: #2a2a2a;
+    padding: 25px;
+    border-radius: 15px;
+    width: 80%;
+    max-width: 300px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
 }
 
 .d-pad-container {
@@ -84,8 +134,9 @@ h1 {
 }
 
 input {
-    flex: 1;
+    width: 100%;
     padding: 12px;
+    box-sizing: border-box;
     border-radius: 5px;
     border: 1px solid #444;
     background: #2a2a2a;
@@ -99,6 +150,7 @@ input {
     border: none;
     color: white;
     border-radius: 5px;
+    cursor: pointer;
 }
 
 .quick-launch {
