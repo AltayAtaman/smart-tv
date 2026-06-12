@@ -1,6 +1,23 @@
 let socket;
 let laptopIP = localStorage.getItem('laptopIP') || window.location.hostname;
 
+const CHANNELS = [
+    { name: 'YouTube TV', url: 'https://www.youtube.com/tv', color: '#e62117', category: 'Streaming' },
+    { name: 'Netflix',    url: 'https://www.netflix.com',    color: '#e50914', category: 'Streaming' },
+    { name: 'Twitch',     url: 'https://www.twitch.tv',      color: '#9146ff', category: 'Streaming' },
+    { name: 'Disney+',    url: 'https://www.disneyplus.com', color: '#113ccf', category: 'Streaming' },
+    { name: 'Kick',       url: 'https://kick.com',           color: '#0e8a2f', category: 'Streaming' },
+    { name: 'HBO Max',    url: 'https://www.hbomax.com/tr/', color: '#002be7', category: 'Streaming' },
+    { name: 'Exxen',      url: 'https://www.exxen.com',      color: '#c79100', category: 'Streaming' },
+    { name: 'TRT 1',      url: 'https://www.tabii.com/tr/watch/live/trt1',   color: '#0a7c5f', category: 'TV', fullscreen: true },
+    { name: 'Kanal D',    url: 'https://www.kanald.com.tr/canli-yayin',      color: '#c00',    category: 'TV', fullscreen: true },
+    { name: 'Show TV',    url: 'https://www.showtv.com.tr/canli-yayin',      color: '#d91d5c', category: 'TV', fullscreen: true },
+    { name: 'NOW',        url: 'https://www.nowtv.com.tr/canli-yayin',       color: '#7a1fa2', category: 'TV', fullscreen: true },
+    { name: 'CNN Türk',   url: 'https://www.cnnturk.com/canli-yayin',        color: '#b00',    category: 'TV', fullscreen: true },
+    { name: 'NTV',        url: 'https://www.ntv.com.tr/canli-yayin',         color: '#1f5fa8', category: 'TV', fullscreen: true },
+    { name: 'Habertürk',  url: 'https://www.haberturk.com/canliyayin',       color: '#444',    category: 'TV', fullscreen: true }
+];
+
 function initSocket() {
     if (socket) socket.disconnect();
     
@@ -43,8 +60,8 @@ function sendText() {
     }
 }
 
-function navigate(url) {
-    socket.emit('command', { type: 'NAVIGATE', url });
+function navigate(url, fullscreen = false) {
+    socket.emit('command', { type: 'NAVIGATE', url, fullscreen });
 }
 
 // Settings Modal Logic
@@ -64,6 +81,37 @@ function saveSettings() {
         initSocket();
     }
 }
+
+// Channels Panel Logic
+function toggleChannels() {
+    const modal = document.getElementById('channelsModal');
+    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+}
+
+function renderChannels() {
+    const list = document.getElementById('channelList');
+    let currentCategory = null;
+    CHANNELS.forEach((channel) => {
+        if (channel.category !== currentCategory) {
+            currentCategory = channel.category;
+            const title = document.createElement('div');
+            title.className = 'channel-group-title';
+            title.textContent = currentCategory;
+            list.appendChild(title);
+        }
+        const btn = document.createElement('button');
+        btn.className = 'channel-btn';
+        btn.textContent = channel.name;
+        btn.style.background = channel.color;
+        btn.onclick = () => {
+            navigate(channel.url, channel.fullscreen === true);
+            toggleChannels();
+        };
+        list.appendChild(btn);
+    });
+}
+
+renderChannels();
 
 // Initial connection
 if (laptopIP) {

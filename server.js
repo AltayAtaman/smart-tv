@@ -45,22 +45,199 @@ async function launchBrowser() {
     browser = await puppeteer.launch({
         headless: false,
         executablePath: executablePath, // Use system browser if found
+        userDataDir: path.join(__dirname, 'chrome-profile'), // Persist cookies/logins across restarts
         args: [
             '--start-fullscreen',
             '--kiosk', // Optional: removes browser UI
             '--no-sandbox',
-            '--disable-setuid-sandbox'
+            '--disable-setuid-sandbox',
+            '--autoplay-policy=no-user-gesture-required',
+            '--disable-notifications' // No "show notifications?" permission prompts
         ],
         defaultViewport: null // Use the actual screen size
     });
     
     const pages = await browser.pages();
     page = pages[0];
+
+    // Ads sometimes open new windows/tabs; close them immediately
+    browser.on('targetcreated', async (target) => {
+        if (target.type() !== 'page') return;
+        const popup = await target.page().catch(() => null);
+        if (popup && popup !== page) {
+            console.log('Closing popup window');
+            await popup.close().catch(() => {});
+        }
+    });
     
     // Set a User Agent to trick sites into TV mode if possible
     await page.setUserAgent('Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/2.2 Chrome/63.0.3239.84 TV Safari/537.36');
     
     await page.goto('https://www.youtube.com/tv', { waitUntil: 'networkidle2' }).catch(e => console.log("Initial navigation error:", e.message));
+}
+
+// Continuous page cleaner: auto-accepts cookie/KVKK consent banners on every
+// page, and (while a TV channel is playing) closes overlay ad popups by
+// clicking their small X buttons. Runs every few seconds across all frames,
+// including shadow DOM. Every await is guarded — frames detach constantly on
+// ad-heavy pages and must never crash the server.
+const CONSENT_TEXTS = [
+    'tümünü kabul et', 'hepsini kabul et', 'kabul et', 'kabul ediyorum',
+    'accept all', 'accept cookies', 'i accept', 'accept', 'agree',
+    'izin ver', 'onayla', 'anladım', 'tamam'
+];
+
+let adCleanMode = false; // true while a TV channel is up; enables ad-popup closing
+let cleaning = false;
+
+async function cleanPass() {
+    if (!page || cleaning) return;
+    cleaning = true;
+    try {
+        let frames = [];
+        try { frames = page.frames(); } catch (e) { return; }
+        for (const frame of frames) {
+            let acted = null;
+            try {
+                acted = await frame.evaluate((texts, killAds) => {
+                    const els = [];
+                    const collect = (root) => {
+                        for (const el of root.querySelectorAll('*')) {
+                            els.push(el);
+                            if (el.shadowRoot) collect(el.shadowRoot);
+                        }
+                    };
+                    collect(document);
+                    const visible = (el) => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    };
+
+                    // 1) Consent banners: accept-style button inside a consent-looking container
+                    const consentRe = /cookie|consent|kvkk|gdpr|onetrust|didomi|efilli|sourcepoint|cmp/i;
+                    const inConsentContainer = (el) => {
+                        let n = el;
+                        while (n) {
+                            if ((n.id && consentRe.test(n.id)) ||
+                                (typeof n.className === 'string' && consentRe.test(n.className))) return true;
+                            n = n.parentElement || (n.getRootNode && n.getRootNode().host) || null;
+                        }
+                        return false;
+                    };
+                    for (const el of els) {
+                        if (!el.matches || !el.matches('button, a, [role="button"]') || !visible(el)) continue;
+                        const t = (el.textContent || '').trim().toLowerCase();
+                        if (!t || t.length > 40) continue;
+                        if (texts.some((s) => t.includes(s)) && inConsentContainer(el)) {
+                            el.click();
+                            return 'consent: ' + t;
+                        }
+                    }
+
+                    // 2) Overlay ad popups: small X/close button on a high z-index overlay
+                    if (killAds) {
+                        const onOverlay = (el) => {
+                            let n = el;
+                            while (n && n !== document.body) {
+                                const cs = getComputedStyle(n);
+                                if ((cs.position === 'fixed' || cs.position === 'absolute') &&
+                                    (parseInt(cs.zIndex, 10) || 0) >= 1000) return true;
+                                n = n.parentElement;
+                            }
+                            return false;
+                        };
+                        for (const el of els) {
+                            if (!visible(el) || !el.getBoundingClientRect) continue;
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 60 || r.height > 60) continue;
+                            const txt = (el.textContent || '').trim().toLowerCase();
+                            const label = ((el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '').toLowerCase();
+                            const cls = (typeof el.className === 'string' ? el.className : '').toLowerCase();
+                            const isX = ['×', '✕', '✖', 'x'].includes(txt) ||
+                                /\b(close|kapat|dismiss)\b/.test(label) ||
+                                /(^|[\s_-])(close|kapat)([\s_-]|$)/.test(cls);
+                            if (isX && onOverlay(el)) {
+                                el.click();
+                                return 'ad popup closed';
+                            }
+                        }
+                    }
+                    return null;
+                }, CONSENT_TEXTS, adCleanMode);
+            } catch (e) {
+                continue; // frame detached mid-scan; skip it
+            }
+            if (acted) {
+                console.log('Auto-dismissed:', acted);
+                break;
+            }
+        }
+    } catch (error) {
+        console.error('Clean pass error:', error.message);
+    } finally {
+        cleaning = false;
+    }
+}
+
+setInterval(() => { cleanPass().catch(() => {}); }, 3000);
+
+// Pin the page's main video player to fill the whole screen.
+// Native fullscreen needs a real user click, so we maximize via CSS instead.
+// Installs a watcher in the page so players that load late (or get
+// re-rendered by the site) are pinned automatically without re-triggering.
+async function enterFullscreen() {
+    if (!page) return;
+    try {
+        await page.evaluate(() => {
+            if (window.__fsWatcher) return;
+
+            const maximize = () => {
+                const els = Array.from(document.querySelectorAll('video, iframe'));
+                let best = null, bestArea = 0;
+                for (const el of els) {
+                    const r = el.getBoundingClientRect();
+                    const area = r.width * r.height;
+                    if (area > bestArea) { bestArea = area; best = el; }
+                }
+                // Ignore tiny/hidden elements (ad trackers, not-yet-loaded players)
+                if (!best || bestArea < 200 * 150) return;
+
+                // position:fixed is clipped by transformed ancestors; neutralize them
+                let p = best.parentElement;
+                while (p && p !== document.body) {
+                    const cs = getComputedStyle(p);
+                    if (cs.transform !== 'none' || cs.filter !== 'none' || cs.perspective !== 'none') {
+                        p.style.transform = 'none';
+                        p.style.filter = 'none';
+                        p.style.perspective = 'none';
+                    }
+                    p = p.parentElement;
+                }
+                Object.assign(best.style, {
+                    position: 'fixed',
+                    top: '0',
+                    left: '0',
+                    width: '100vw',
+                    height: '100vh',
+                    zIndex: '2147483647',
+                    background: '#000'
+                });
+                best.removeAttribute('width');
+                best.removeAttribute('height');
+                document.documentElement.style.overflow = 'hidden';
+                document.body.style.overflow = 'hidden';
+                if (best.tagName === 'VIDEO' && best.paused) {
+                    best.play().catch(() => {});
+                }
+            };
+
+            window.__fsWatcher = setInterval(maximize, 2000);
+            maximize();
+        });
+        console.log('Fullscreen watcher installed');
+    } catch (error) {
+        console.error('Fullscreen error:', error.message);
+    }
 }
 
 io.on('connection', (socket) => {
@@ -76,7 +253,12 @@ io.on('connection', (socket) => {
                     await page.keyboard.press(data.key);
                     break;
                 case 'NAVIGATE':
+                    adCleanMode = !!data.fullscreen;
                     await page.goto(data.url, { waitUntil: 'networkidle2' });
+                    if (data.fullscreen) await enterFullscreen();
+                    break;
+                case 'FULLSCREEN':
+                    await enterFullscreen();
                     break;
                 case 'TYPE':
                     await page.keyboard.type(data.text);

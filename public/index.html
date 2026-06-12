@@ -37,8 +37,9 @@
             <button class="btn down" onclick="sendCommand('KEY_PRESS', 'ArrowDown')">▼</button>
         </div>
 
+        <button class="btn-back" onclick="sendCommand('BACK')">⬅ Back</button>
+
         <div class="playback-controls">
-            <button class="btn-secondary" onclick="sendCommand('BACK')">Back</button>
             <button class="btn-secondary" onclick="sendCommand('KEY_PRESS', 'Backspace')">Del ⌫</button>
             <button class="btn-secondary" onclick="sendCommand('RELOAD')">Reload</button>
         </div>
@@ -49,8 +50,17 @@
         </form>
 
         <div class="quick-launch">
-            <button class="btn-launch youtube" onclick="navigate('https://www.youtube.com/tv')">YouTube</button>
-            <button class="btn-launch tv" onclick="navigate('https://www.google.com')">Live TV</button>
+            <button class="btn-launch tv" onclick="toggleChannels()">📺 Channels</button>
+        </div>
+
+        <div id="channelsModal" class="modal">
+            <div class="modal-content">
+                <h2>Channels</h2>
+                <div id="channelList" class="channel-list"></div>
+                <div class="modal-actions">
+                    <button class="btn-secondary" onclick="toggleChannels()">Close</button>
+                </div>
+            </div>
         </div>
     </div>
 

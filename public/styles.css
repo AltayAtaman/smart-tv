@@ -111,6 +111,25 @@ h1 {
     font-weight: bold;
 }
 
+.btn-back {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 15px;
+    background: #007bff;
+    border: none;
+    color: white;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.btn-back:active {
+    background: #0069d9;
+    transform: translateY(2px);
+}
+
 .playback-controls {
     display: flex;
     justify-content: center;
@@ -171,3 +190,38 @@ input {
 
 .youtube { background: #e62117; }
 .tv { background: #28a745; }
+
+.channel-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.channel-group-title {
+    grid-column: 1 / -1;
+    color: #888;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: left;
+    margin-top: 5px;
+}
+
+.channel-btn {
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.channel-btn:active {
+    opacity: 0.8;
+    transform: translateY(2px);
+}
