@@ -19,6 +19,13 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Download the Android app: open http://<server-ip>:3000/app.apk on the phone
+app.get('/app.apk', (req, res) => {
+    const apk = path.join(__dirname, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
+    if (!fs.existsSync(apk)) return res.status(404).send('APK not built yet. Run: npx cap sync android && cd android && gradlew assembleDebug');
+    res.download(apk, 'smart-tv-remote.apk');
+});
+
 let browser;
 let page;
 
