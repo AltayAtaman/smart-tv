@@ -1,5 +1,9 @@
 {
   "appId": "com.yourdomain.smarttv",
   "appName": "Smart TV Remote",
-  "webDir": "public"
+  "webDir": "public",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
 }
