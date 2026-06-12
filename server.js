@@ -79,6 +79,30 @@ async function launchBrowser() {
     
     // Set a User Agent to trick sites into TV mode if possible
     await page.setUserAgent('Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/2.2 Chrome/63.0.3239.84 TV Safari/537.36');
+
+    // Tiny corner badge with the remote URL, shown on every page so the IP
+    // can be read off the TV screen when setting up a phone
+    await page.evaluateOnNewDocument((addr) => {
+        if (window !== window.top) return; // main page only, not ad iframes
+        window.addEventListener('DOMContentLoaded', () => {
+            const badge = document.createElement('div');
+            badge.textContent = '📱 ' + addr;
+            Object.assign(badge.style, {
+                position: 'fixed',
+                bottom: '6px',
+                right: '8px',
+                zIndex: '2147483647',
+                background: 'rgba(0,0,0,0.55)',
+                color: '#fff',
+                font: '12px monospace',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                pointerEvents: 'none',
+                opacity: '0.7'
+            });
+            if (document.body) document.body.appendChild(badge);
+        });
+    }, `${getLocalIp()}:${PORT}`);
     
     await page.goto('https://www.youtube.com/tv', { waitUntil: 'networkidle2' }).catch(e => console.log("Initial navigation error:", e.message));
 }
@@ -291,14 +315,17 @@ const os = require('os');
 
 function getLocalIp() {
     const interfaces = os.networkInterfaces();
+    const candidates = [];
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
             if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
+                candidates.push(iface.address);
             }
         }
     }
-    return 'localhost';
+    // Prefer private LAN addresses over CGNAT/VPN ones (e.g. Tailscale 100.64+)
+    const isLan = (a) => a.startsWith('192.168.') || a.startsWith('10.') || /^172\.(1[6-9]|2\d|3[01])\./.test(a);
+    return candidates.find(isLan) || candidates[0] || 'localhost';
 }
 
 server.listen(PORT, '0.0.0.0', async () => {
