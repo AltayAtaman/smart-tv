@@ -271,6 +271,67 @@ async function enterFullscreen() {
     }
 }
 
+// Virtual mouse cursor for sites without arrow-key navigation (e.g. Netflix).
+// The D-pad moves it, OK clicks. Repeated taps accelerate. A dot is drawn on
+// the page since synthetic mouse events have no visible OS pointer.
+const cursor = { x: 640, y: 360, step: 30, lastMove: 0, lastDir: null };
+const CURSOR_DIRS = {
+    ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0]
+};
+
+async function drawCursor(visible) {
+    await page.evaluate((x, y, show) => {
+        let dot = document.getElementById('__remoteCursor');
+        if (!show) { if (dot) dot.remove(); return; }
+        if (!dot) {
+            dot = document.createElement('div');
+            dot.id = '__remoteCursor';
+            Object.assign(dot.style, {
+                position: 'fixed',
+                width: '22px',
+                height: '22px',
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.85)',
+                border: '2px solid rgba(0,0,0,0.6)',
+                zIndex: '2147483647',
+                pointerEvents: 'none',
+                transform: 'translate(-50%, -50%)',
+                boxShadow: '0 0 6px rgba(0,0,0,0.7)'
+            });
+            document.body.appendChild(dot);
+        }
+        dot.style.left = x + 'px';
+        dot.style.top = y + 'px';
+    }, cursor.x, cursor.y, visible).catch(() => {});
+}
+
+async function moveCursor(direction) {
+    if (!page || !CURSOR_DIRS[direction]) return;
+    const now = Date.now();
+    // Accelerate while tapping the same direction quickly, reset otherwise
+    if (direction === cursor.lastDir && now - cursor.lastMove < 500) {
+        cursor.step = Math.min(cursor.step * 1.5, 240);
+    } else {
+        cursor.step = 30;
+    }
+    cursor.lastDir = direction;
+    cursor.lastMove = now;
+
+    const size = await page.evaluate(() => ({ w: innerWidth, h: innerHeight })).catch(() => ({ w: 1280, h: 720 }));
+    const [dx, dy] = CURSOR_DIRS[direction];
+    cursor.x = Math.max(0, Math.min(size.w - 1, cursor.x + dx * cursor.step));
+    cursor.y = Math.max(0, Math.min(size.h - 1, cursor.y + dy * cursor.step));
+
+    await page.mouse.move(cursor.x, cursor.y).catch(() => {});
+    await drawCursor(true);
+}
+
+async function clickCursor() {
+    if (!page) return;
+    await page.mouse.click(cursor.x, cursor.y).catch(() => {});
+    await drawCursor(true);
+}
+
 io.on('connection', (socket) => {
     console.log('Remote controller connected');
 
@@ -290,6 +351,15 @@ io.on('connection', (socket) => {
                     break;
                 case 'FULLSCREEN':
                     await enterFullscreen();
+                    break;
+                case 'CURSOR_MOVE':
+                    await moveCursor(data.key);
+                    break;
+                case 'CURSOR_CLICK':
+                    await clickCursor();
+                    break;
+                case 'CURSOR_HIDE':
+                    await drawCursor(false);
                     break;
                 case 'TYPE':
                     await page.keyboard.type(data.text);

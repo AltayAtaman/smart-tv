@@ -40,6 +40,32 @@ function initSocket() {
     });
 }
 
+// Cursor mode: D-pad moves a mouse pointer on the TV instead of sending
+// arrow keys — for sites without keyboard navigation (e.g. Netflix)
+let cursorMode = localStorage.getItem('cursorMode') === 'true';
+
+function toggleCursorMode() {
+    cursorMode = !cursorMode;
+    localStorage.setItem('cursorMode', cursorMode);
+    updateCursorButton();
+    if (!cursorMode) sendCommand('CURSOR_HIDE');
+}
+
+function updateCursorButton() {
+    const btn = document.getElementById('cursorBtn');
+    if (btn) btn.classList.toggle('active', cursorMode);
+}
+
+function dpad(key) {
+    if (cursorMode && key !== 'Enter') {
+        sendCommand('CURSOR_MOVE', key);
+    } else if (cursorMode && key === 'Enter') {
+        sendCommand('CURSOR_CLICK');
+    } else {
+        sendCommand('KEY_PRESS', key);
+    }
+}
+
 function sendCommand(type, key = null) {
     if (!socket || !socket.connected) {
         alert("Not connected! Check settings.");
@@ -112,6 +138,7 @@ function renderChannels() {
 }
 
 renderChannels();
+updateCursorButton();
 
 // Initial connection
 if (laptopIP) {
@@ -124,5 +151,6 @@ if (laptopIP) {
 document.addEventListener('keydown', (e) => {
     if (document.activeElement.tagName === 'INPUT') return;
     const keys = { ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', Enter: 'Enter', Backspace: 'Backspace' };
-    if (keys[e.key]) sendCommand('KEY_PRESS', keys[e.key]);
+    if (e.key === 'Backspace') sendCommand('KEY_PRESS', 'Backspace');
+    else if (keys[e.key]) dpad(e.key);
 });

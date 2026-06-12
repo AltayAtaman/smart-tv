@@ -11,6 +11,7 @@
 <body>
     <div class="remote-container">
         <header>
+            <button id="cursorBtn" class="btn-cursor" onclick="toggleCursorMode()">🖱️</button>
             <h1>Smart TV</h1>
             <button class="btn-settings" onclick="toggleSettings()">⚙</button>
         </header>
@@ -28,13 +29,13 @@
         </div>
 
         <div class="d-pad-container">
-            <button class="btn up" onclick="sendCommand('KEY_PRESS', 'ArrowUp')">▲</button>
+            <button class="btn up" onclick="dpad('ArrowUp')">▲</button>
             <div class="middle-row">
-                <button class="btn left" onclick="sendCommand('KEY_PRESS', 'ArrowLeft')">◀</button>
-                <button class="btn ok" onclick="sendCommand('KEY_PRESS', 'Enter')">OK</button>
-                <button class="btn right" onclick="sendCommand('KEY_PRESS', 'ArrowRight')">▶</button>
+                <button class="btn left" onclick="dpad('ArrowLeft')">◀</button>
+                <button class="btn ok" onclick="dpad('Enter')">OK</button>
+                <button class="btn right" onclick="dpad('ArrowRight')">▶</button>
             </div>
-            <button class="btn down" onclick="sendCommand('KEY_PRESS', 'ArrowDown')">▼</button>
+            <button class="btn down" onclick="dpad('ArrowDown')">▼</button>
         </div>
 
         <button class="btn-back" onclick="sendCommand('BACK')">⬅ Back</button>
