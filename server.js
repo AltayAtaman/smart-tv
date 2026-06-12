@@ -19,10 +19,17 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Download the Android app: open http://<server-ip>:3000/app.apk on the phone
+// Download the Android app: open http://<server-ip>:3000/app.apk on the phone.
+// release/ holds the latest committed build so any machine that pulls the
+// repo can serve it; falls back to a local gradle build output if present.
 app.get('/app.apk', (req, res) => {
-    const apk = path.join(__dirname, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
-    if (!fs.existsSync(apk)) return res.status(404).send('APK not built yet. Run: npx cap sync android && cd android && gradlew assembleDebug');
+    const candidates = [
+        path.join(__dirname, 'release', 'smart-tv-remote.apk'),
+        path.join(__dirname, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk')
+    ];
+    const apk = candidates.filter(fs.existsSync)
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    if (!apk) return res.status(404).send('No APK available in this checkout.');
     res.download(apk, 'smart-tv-remote.apk');
 });
 
