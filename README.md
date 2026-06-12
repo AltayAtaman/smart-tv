@@ -4,12 +4,15 @@ A custom Smart TV remote system designed for Linux laptops connected to a TV via
 
 ## Features
 
-- **PWA Remote Control**: Mobile-friendly interface that can be installed on your phone.
+- **PWA + Android App**: Mobile-friendly remote as a web app, or install the native Android app from `http://<server-ip>:3000/app.apk`.
 - **Browser Control**: Uses Puppeteer to manage a full-screen Chromium instance on the TV.
-- **YouTube Optimized**: Pre-configured to launch YouTube TV for a seamless couch experience.
-- **D-Pad Navigation**: Full directional control (Up, Down, Left, Right, OK).
+- **Channels Panel**: One-tap access to streaming services (YouTube TV, Netflix, Twitch, Disney+, Kick, HBO Max, Exxen) and Turkish TV channels (TRT 1, Kanal D, Show TV, NOW, CNN Türk, NTV, Habertürk).
+- **Auto-Fullscreen**: TV channel streams are pinned to fill the screen automatically.
+- **Self-Cleaning Pages**: Cookie/KVKK consent banners are auto-accepted and overlay ad popups auto-closed.
+- **Persistent Logins**: The TV browser keeps its profile across restarts, so streaming logins stick.
+- **D-Pad Navigation**: Full directional control (Up, Down, Left, Right, OK) plus a prominent Back button.
 - **Search/Type**: Send text from your phone directly to the TV browser's active input.
-- **Quick Launch**: Buttons to quickly switch between YouTube and other web-based TV sources.
+- **On-Screen Remote URL**: A small badge on the TV shows the address to enter on your phone.
 
 ## Prerequisites
 
@@ -21,7 +24,7 @@ A custom Smart TV remote system designed for Linux laptops connected to a TV via
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/smart-tv.git
+   git clone https://github.com/AltayAtaman/smart-tv.git
    cd smart-tv
    ```
 

@@ -1,5 +1,6 @@
 node_modules/
 chrome-profile/
+SESSION_SUMMARY.md
 .DS_Store
 .env
 npm-debug.log*
