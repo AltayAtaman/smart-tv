@@ -60,6 +60,7 @@ async function launchBrowser() {
         headless: false,
         executablePath: executablePath, // Use system browser if found
         userDataDir: path.join(__dirname, 'chrome-profile'), // Persist cookies/logins across restarts
+        ignoreDefaultArgs: ['--enable-automation'], // Hide "controlled by automated test software" bar
         args: [
             '--start-fullscreen',
             '--kiosk', // Optional: removes browser UI
@@ -368,6 +369,45 @@ io.on('connection', (socket) => {
                 case 'CURSOR_HIDE':
                     await drawCursor(false);
                     break;
+                case 'VOLUME': {
+                    // Adjust the playing <video>'s volume and flash an indicator
+                    const delta = data.key === '+' ? 0.1 : -0.1;
+                    for (const frame of page.frames()) {
+                        const done = await frame.evaluate((d) => {
+                            const vids = Array.from(document.querySelectorAll('video'));
+                            const v = vids.find((x) => !x.paused) || vids[0];
+                            if (!v) return false;
+                            v.muted = false;
+                            v.volume = Math.max(0, Math.min(1, Math.round((v.volume + d) * 10) / 10));
+                            let o = document.getElementById('__volOverlay');
+                            if (!o) {
+                                o = document.createElement('div');
+                                o.id = '__volOverlay';
+                                Object.assign(o.style, {
+                                    position: 'fixed',
+                                    bottom: '40px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: '2147483647',
+                                    background: 'rgba(0,0,0,0.75)',
+                                    color: '#fff',
+                                    font: 'bold 22px sans-serif',
+                                    padding: '8px 20px',
+                                    borderRadius: '10px',
+                                    pointerEvents: 'none'
+                                });
+                                document.body.appendChild(o);
+                            }
+                            o.textContent = '🔊 ' + Math.round(v.volume * 100) + '%';
+                            o.style.display = 'block';
+                            clearTimeout(window.__volTimer);
+                            window.__volTimer = setTimeout(() => { o.style.display = 'none'; }, 1200);
+                            return true;
+                        }, delta).catch(() => false);
+                        if (done) break;
+                    }
+                    break;
+                }
                 case 'TYPE':
                     await page.keyboard.type(data.text);
                     break;

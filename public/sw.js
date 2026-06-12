@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tv-remote-v8';
+const CACHE_NAME = 'tv-remote-v9';
 const ASSETS = [
     '/',
     '/index.html',

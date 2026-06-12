@@ -40,6 +40,11 @@
 
         <button class="btn-back" onclick="sendCommand('BACK')">⬅ Back</button>
 
+        <div class="volume-controls">
+            <button class="btn-volume" onclick="sendCommand('VOLUME', '-')">🔉 −</button>
+            <button class="btn-volume" onclick="sendCommand('VOLUME', '+')">🔊 +</button>
+        </div>
+
         <div class="playback-controls">
             <button class="btn-secondary" onclick="sendCommand('KEY_PRESS', 'Backspace')">Del ⌫</button>
             <button class="btn-secondary" onclick="sendCommand('RELOAD')">Reload</button>
