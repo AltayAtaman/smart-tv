@@ -18,6 +18,67 @@ const CHANNELS = [
     { name: 'Habertürk',  url: 'https://www.haberturk.com/canliyayin',       color: '#444',    category: 'TV', fullscreen: true }
 ];
 
+let isDiscovering = false;
+
+async function discoverServer() {
+    if (isDiscovering) return false;
+    isDiscovering = true;
+    
+    console.log("Checking if running in Capacitor...");
+    const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+    const titleEl = document.querySelector('h1');
+    
+    if (isNative && window.Capacitor.Plugins && window.Capacitor.Plugins.mDNS) {
+        console.log("Capacitor & mDNS plugin found. Starting discovery...");
+        if (titleEl) {
+            titleEl.textContent = 'Searching...';
+            titleEl.style.color = '#ffc107'; // Yellow
+        }
+        
+        try {
+            const mDNS = window.Capacitor.Plugins.mDNS;
+            const result = await mDNS.discover({
+                type: '_smarttvremote._tcp',
+                domain: 'local'
+            });
+            
+            console.log("Discovery result:", result);
+            if (result && result.services && result.services.length > 0) {
+                const service = result.services[0];
+                const ip = service.addresses && service.addresses.length > 0 
+                    ? service.addresses.find(addr => !addr.includes(':')) || service.addresses[0]
+                    : null;
+                const port = service.port || 3000;
+                
+                if (ip) {
+                    console.log(`Discovered Smart TV Remote at http://${ip}:${port}`);
+                    laptopIP = ip;
+                    localStorage.setItem('laptopIP', laptopIP);
+                    
+                    if (titleEl) {
+                        titleEl.textContent = 'Smart TV';
+                    }
+                    isDiscovering = false;
+                    initSocket();
+                    return true;
+                }
+            }
+            console.log("No services found on this scan.");
+        } catch (error) {
+            console.error("mDNS discovery error:", error);
+        }
+    } else {
+        console.log("Not running in native Capacitor or mDNS plugin unavailable.");
+    }
+    
+    if (titleEl) {
+        titleEl.textContent = 'Smart TV';
+        titleEl.style.color = '#e62117'; // Red for disconnected
+    }
+    isDiscovering = false;
+    return false;
+}
+
 function initSocket() {
     if (socket) socket.disconnect();
     
@@ -25,18 +86,36 @@ function initSocket() {
     const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
     console.log(`Connecting to: ${connectionUrl}`);
     
-    // We need to ensure socket.io is loaded. In a PWA it's usually at /socket.io/socket.io.js
-    // In a standalone app, we might need to load it from the server.
-    socket = io(connectionUrl);
+    socket = io(connectionUrl, {
+        reconnectionAttempts: 2,
+        timeout: 4000
+    });
 
     socket.on('connect', () => {
         console.log('Connected to Smart TV');
-        document.querySelector('h1').style.color = '#28a745'; // Green for connected
+        const titleEl = document.querySelector('h1');
+        if (titleEl) {
+            titleEl.style.color = '#28a745'; // Green
+            titleEl.textContent = 'Smart TV';
+        }
     });
 
     socket.on('disconnect', () => {
         console.log('Disconnected from Smart TV');
-        document.querySelector('h1').style.color = '#e62117'; // Red for disconnected
+        const titleEl = document.querySelector('h1');
+        if (titleEl) {
+            titleEl.style.color = '#e62117'; // Red
+            titleEl.textContent = 'Smart TV';
+        }
+    });
+
+    socket.on('connect_error', () => {
+        console.log('Connection failed. Attempting mDNS discovery...');
+        const titleEl = document.querySelector('h1');
+        if (titleEl) {
+            titleEl.style.color = '#ffc107'; // Yellow
+        }
+        discoverServer();
     });
 }
 
@@ -141,11 +220,25 @@ renderChannels();
 updateCursorButton();
 
 // Initial connection
-if (laptopIP) {
-    initSocket();
-} else {
-    toggleSettings(); // Force settings if no IP
-}
+(async () => {
+    const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+    if (isNative && (!laptopIP || laptopIP === 'localhost' || laptopIP === '127.0.0.1')) {
+        const found = await discoverServer();
+        if (!found) {
+            if (laptopIP && laptopIP !== 'localhost') {
+                initSocket();
+            } else {
+                toggleSettings();
+            }
+        }
+    } else {
+        if (laptopIP) {
+            initSocket();
+        } else {
+            toggleSettings();
+        }
+    }
+})();
 
 // Keyboard shortcuts for testing
 document.addEventListener('keydown', (e) => {

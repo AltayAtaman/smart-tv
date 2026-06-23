@@ -14,6 +14,8 @@
     "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
     "@capacitor/core": "^8.4.0",
+    "@devioarts/capacitor-mdns": "^0.0.3",
+    "bonjour-service": "^1.4.1",
     "express": "^5.2.1",
     "puppeteer": "^24.43.1",
     "socket.io": "^4.8.3"

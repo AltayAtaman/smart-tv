@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
+const { Bonjour } = require('bonjour-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -370,15 +371,65 @@ io.on('connection', (socket) => {
                     await drawCursor(false);
                     break;
                 case 'VOLUME': {
-                    // Adjust the playing <video>'s volume and flash an indicator
                     const delta = data.key === '+' ? 0.1 : -0.1;
+                    const candidates = [];
+                    
+                    // 1) Find the best video candidate in each frame
                     for (const frame of page.frames()) {
-                        const done = await frame.evaluate((d) => {
-                            const vids = Array.from(document.querySelectorAll('video'));
-                            const v = vids.find((x) => !x.paused) || vids[0];
-                            if (!v) return false;
+                        try {
+                            const info = await frame.evaluate(() => {
+                                const vids = Array.from(document.querySelectorAll('video'));
+                                if (vids.length === 0) return null;
+                                
+                                let bestIndex = -1;
+                                let bestScore = -1;
+                                let bestVol = 1.0;
+                                
+                                vids.forEach((v, index) => {
+                                    const r = v.getBoundingClientRect();
+                                    const area = r.width * r.height;
+                                    // Ignore completely hidden/zero-sized video trackers
+                                    if (area <= 0) return;
+                                    
+                                    const isPlaying = !v.paused && !v.ended && v.readyState >= 2;
+                                    // Score: playing gets huge boost, then sort by visible screen area
+                                    const score = (isPlaying ? 1000000 : 0) + area;
+                                    if (score > bestScore) {
+                                        bestScore = score;
+                                        bestIndex = index;
+                                        bestVol = v.volume;
+                                    }
+                                });
+                                
+                                if (bestIndex === -1) return null;
+                                return { index: bestIndex, score: bestScore, volume: bestVol };
+                            });
+                            
+                            if (info) {
+                                candidates.push({ frame, info });
+                            }
+                        } catch (e) {
+                            // Frame detached or inaccessible due to CORS
+                        }
+                    }
+                    
+                    // 2) Sort candidates by score descending and take the winner
+                    candidates.sort((a, b) => b.info.score - a.info.score);
+                    const winner = candidates[0];
+                    
+                    if (winner) {
+                        await winner.frame.evaluate((index, d) => {
+                            const v = document.querySelectorAll('video')[index];
+                            if (!v) return;
+                            
                             v.muted = false;
-                            v.volume = Math.max(0, Math.min(1, Math.round((v.volume + d) * 10) / 10));
+                            const newVol = Math.max(0, Math.min(1, Math.round((v.volume + d) * 10) / 10));
+                            v.volume = newVol;
+                            
+                            // Dispatch volumechange event so custom player UI (like YouTube/Twitch) knows it updated
+                            v.dispatchEvent(new Event('volumechange', { bubbles: true }));
+                            
+                            // Flash the volume overlay indicator on the TV screen
                             let o = document.getElementById('__volOverlay');
                             if (!o) {
                                 o = document.createElement('div');
@@ -398,13 +449,11 @@ io.on('connection', (socket) => {
                                 });
                                 document.body.appendChild(o);
                             }
-                            o.textContent = '🔊 ' + Math.round(v.volume * 100) + '%';
+                            o.textContent = '🔊 ' + Math.round(newVol * 100) + '%';
                             o.style.display = 'block';
                             clearTimeout(window.__volTimer);
                             window.__volTimer = setTimeout(() => { o.style.display = 'none'; }, 1200);
-                            return true;
-                        }, delta).catch(() => false);
-                        if (done) break;
+                        }, winner.info.index, delta).catch(e => console.log('Error updating winner volume:', e.message));
                     }
                     break;
                 }
@@ -450,5 +499,24 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Mobile Remote URL: http://${ip}:${PORT}`);
     console.log(`To control, open the Mobile Remote URL on your phone.`);
+    
+    // Advertise the Smart TV Remote service via mDNS
+    try {
+        const bonjour = new Bonjour();
+        bonjour.publish({
+            name: `Smart TV Remote (${ip})`,
+            type: 'smarttvremote',
+            protocol: 'tcp',
+            port: PORT,
+            txt: {
+                ip: ip,
+                port: PORT.toString()
+            }
+        });
+        console.log(`Advertised mDNS service: Smart TV Remote (${ip}) on port ${PORT}`);
+    } catch (e) {
+        console.error('Failed to advertise mDNS service:', e.message);
+    }
+    
     await launchBrowser();
 });
