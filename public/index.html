@@ -21,6 +21,24 @@
                 <h2>Connection Settings</h2>
                 <p>Enter Linux Laptop IP:</p>
                 <input type="text" id="ipInput" placeholder="e.g. 192.168.1.23">
+                
+                <div class="settings-divider"></div>
+                
+                <h2>System Updates</h2>
+                <div class="updates-section">
+                    <div class="update-row">
+                        <span>Remote App:</span>
+                        <button class="btn-secondary btn-sm" onclick="checkClientUpdate()">Check Update</button>
+                    </div>
+                    <div id="clientUpdateStatus" class="update-status"></div>
+                    
+                    <div class="update-row">
+                        <span>TV Server:</span>
+                        <button class="btn-secondary btn-sm" onclick="checkServerUpdate()">Check Update</button>
+                    </div>
+                    <div id="serverUpdateStatus" class="update-status"></div>
+                </div>
+                
                 <div class="modal-actions">
                     <button class="btn-secondary" onclick="toggleSettings()">Cancel</button>
                     <button class="btn-action" onclick="saveSettings()">Save & Connect</button>

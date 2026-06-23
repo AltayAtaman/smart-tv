@@ -1,3 +1,4 @@
+const CLIENT_VERSION = '1.0.0';
 let socket;
 let laptopIP = localStorage.getItem('laptopIP') || window.location.hostname;
 
@@ -247,3 +248,89 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace') sendCommand('KEY_PRESS', 'Backspace');
     else if (keys[e.key]) dpad(e.key);
 });
+
+async function checkClientUpdate() {
+    const statusEl = document.getElementById('clientUpdateStatus');
+    statusEl.textContent = 'Checking...';
+    statusEl.style.color = '#aaa';
+    
+    const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
+    try {
+        const res = await fetch(`${connectionUrl}/api/version`);
+        if (!res.ok) throw new Error('Server responded with error');
+        const data = await res.json();
+        
+        const serverVer = data.serverVersion;
+        if (compareVersions(CLIENT_VERSION, serverVer) < 0) {
+            statusEl.textContent = `Update available! v${CLIENT_VERSION} -> v${serverVer}`;
+            statusEl.style.color = '#ffc107'; // Yellow
+            
+            if (confirm(`New APK update available (v${serverVer}). Would you like to download and install it?`)) {
+                window.open(`${connectionUrl}/app.apk`, '_system');
+            }
+        } else {
+            statusEl.textContent = `App is up to date (v${CLIENT_VERSION})`;
+            statusEl.style.color = '#28a745'; // Green
+        }
+    } catch (e) {
+        statusEl.textContent = 'Failed to check: ' + e.message;
+        statusEl.style.color = '#e62117'; // Red
+    }
+}
+
+async function checkServerUpdate() {
+    const statusEl = document.getElementById('serverUpdateStatus');
+    statusEl.textContent = 'Checking...';
+    statusEl.style.color = '#aaa';
+    
+    const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
+    try {
+        const res = await fetch(`${connectionUrl}/api/version`);
+        if (!res.ok) throw new Error('Server responded with error');
+        const data = await res.json();
+        
+        if (!data.isGit) {
+            statusEl.textContent = 'TV Server is not a Git repo. Auto-update disabled.';
+            statusEl.style.color = '#e62117';
+            return;
+        }
+        
+        if (data.git && data.git.updateAvailable) {
+            statusEl.textContent = `New commits available: ${data.git.localSha} -> ${data.git.remoteSha}`;
+            statusEl.style.color = '#ffc107';
+            
+            if (confirm(`New TV Server updates available on GitHub. Would you like to pull updates and restart the TV server?`)) {
+                statusEl.textContent = 'Updating TV Server... App will reconnect when done.';
+                statusEl.style.color = '#ffc107';
+                
+                const updateRes = await fetch(`${connectionUrl}/api/update`, { method: 'POST' });
+                if (!updateRes.ok) throw new Error('Update call failed');
+                
+                const titleEl = document.querySelector('h1');
+                if (titleEl) {
+                    titleEl.textContent = 'Updating...';
+                    titleEl.style.color = '#ffc107';
+                }
+            }
+        } else if (data.git && data.git.error) {
+            statusEl.textContent = `Git error: ${data.git.error}`;
+            statusEl.style.color = '#e62117';
+        } else {
+            statusEl.textContent = `TV Server is up to date (commit ${data.git.localSha})`;
+            statusEl.style.color = '#28a745';
+        }
+    } catch (e) {
+        statusEl.textContent = 'Failed to check: ' + e.message;
+        statusEl.style.color = '#e62117';
+    }
+}
+
+function compareVersions(v1, v2) {
+    const a = v1.split('.').map(Number);
+    const b = v2.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        if (a[i] < b[i]) return -1;
+        if (a[i] > b[i]) return 1;
+    }
+    return 0;
+}

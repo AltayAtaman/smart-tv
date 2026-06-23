@@ -34,6 +34,111 @@ app.get('/app.apk', (req, res) => {
     res.download(apk, 'smart-tv-remote.apk');
 });
 
+const { exec, spawn } = require('child_process');
+
+function checkGitUpdate() {
+    return new Promise((resolve) => {
+        exec('git fetch origin master', (err) => {
+            if (err) {
+                console.error('Git fetch failed:', err.message);
+                return resolve({ updateAvailable: false, error: 'Git fetch failed' });
+            }
+            exec('git rev-parse HEAD', (err, localSha) => {
+                if (err) return resolve({ updateAvailable: false, error: err.message });
+                exec('git rev-parse origin/master', (err, remoteSha) => {
+                    if (err) return resolve({ updateAvailable: false, error: err.message });
+                    const local = localSha.trim();
+                    const remote = remoteSha.trim();
+                    resolve({
+                        updateAvailable: local !== remote,
+                        localSha: local.substring(0, 7),
+                        remoteSha: remote.substring(0, 7)
+                    });
+                });
+            });
+        });
+    });
+}
+
+function performServerUpdate() {
+    return new Promise((resolve, reject) => {
+        console.log('Auto-update: Starting git pull...');
+        exec('git pull', (err) => {
+            if (err) return reject(new Error('Git pull failed: ' + err.message));
+            console.log('Auto-update: Running npm install...');
+            exec('npm install', (err) => {
+                if (err) return reject(new Error('npm install failed: ' + err.message));
+                console.log('Auto-update: Running cap sync android...');
+                exec('npx cap sync android', (err) => {
+                    if (err) {
+                        console.warn('Auto-update: cap sync warning:', err.message);
+                    }
+                    resolve();
+                });
+            });
+        });
+    });
+}
+
+// Check for updates
+app.get('/api/version', async (req, res) => {
+    const isGit = fs.existsSync(path.join(__dirname, '.git'));
+    let gitInfo = { updateAvailable: false };
+    if (isGit) {
+        gitInfo = await checkGitUpdate().catch(() => ({ updateAvailable: false, error: 'Git check failed' }));
+    }
+    res.json({
+        serverVersion: require('./package.json').version,
+        isGit: isGit,
+        git: gitInfo
+    });
+});
+
+// Perform update and restart
+app.post('/api/update', async (req, res) => {
+    const isGit = fs.existsSync(path.join(__dirname, '.git'));
+    if (!isGit) {
+        return res.status(400).json({ error: 'Auto-update only supported for git repositories.' });
+    }
+    
+    // Respond to remote controller immediately so it knows we accepted the update command
+    res.json({ status: 'updating', message: 'Pulling updates and restarting TV server...' });
+    
+    try {
+        await performServerUpdate();
+        console.log('Auto-update: Pull complete. Scheduling server restart in 1.5s...');
+        
+        // Spawn a helper process to delay, then start the server again, and exit
+        const escapedNode = process.argv[0].replace(/\\/g, '\\\\');
+        const escapedCwd = process.cwd().replace(/\\/g, '\\\\');
+        
+        const cmd = `setTimeout(() => {
+            const { spawn } = require('child_process');
+            const child = spawn('${escapedNode}', ['server.js'], {
+                detached: true,
+                stdio: 'ignore',
+                cwd: '${escapedCwd}'
+            });
+            child.unref();
+        }, 1500);`;
+        
+        const helper = spawn(process.argv[0], ['-e', cmd], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        helper.unref();
+        
+        // Close Puppeteer browser cleanly before exit
+        if (browser) {
+            await browser.close().catch(() => {});
+        }
+        
+        process.exit(0);
+    } catch (error) {
+        console.error('Auto-update: Update failed:', error.message);
+    }
+});
+
 let browser;
 let page;
 
