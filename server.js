@@ -446,6 +446,15 @@ async function clickCursor() {
     await drawCursor(true);
 }
 
+async function moveCursorDelta(dx, dy) {
+    if (!page) return;
+    const size = await page.evaluate(() => ({ w: innerWidth, h: innerHeight })).catch(() => ({ w: 1280, h: 720 }));
+    cursor.x = Math.max(0, Math.min(size.w - 1, cursor.x + dx));
+    cursor.y = Math.max(0, Math.min(size.h - 1, cursor.y + dy));
+    await page.mouse.move(cursor.x, cursor.y).catch(() => {});
+    await drawCursor(true);
+}
+
 io.on('connection', (socket) => {
     console.log('Remote controller connected');
 
@@ -461,7 +470,30 @@ io.on('connection', (socket) => {
                 case 'NAVIGATE':
                     adCleanMode = !!data.fullscreen;
                     await page.goto(data.url, { waitUntil: 'networkidle2' });
-                    if (data.fullscreen) await enterFullscreen();
+                    if (data.fullscreen) {
+                        // Fire immediately in case the player is already there
+                        await enterFullscreen();
+                        // Then keep retrying for up to 20s for late-loading players (e.g. Show TV)
+                        let retries = 0;
+                        const fsRetry = setInterval(async () => {
+                            retries++;
+                            try {
+                                const hasVideo = await page.evaluate(() => {
+                                    const els = Array.from(document.querySelectorAll('video'));
+                                    return els.some(v => {
+                                        const r = v.getBoundingClientRect();
+                                        return r.width > 200 && r.height > 150;
+                                    });
+                                });
+                                if (hasVideo || retries >= 13) {
+                                    clearInterval(fsRetry);
+                                }
+                                await enterFullscreen();
+                            } catch (e) {
+                                clearInterval(fsRetry);
+                            }
+                        }, 1500);
+                    }
                     break;
                 case 'FULLSCREEN':
                     await enterFullscreen();
@@ -474,6 +506,17 @@ io.on('connection', (socket) => {
                     break;
                 case 'CURSOR_HIDE':
                     await drawCursor(false);
+                    break;
+                case 'CURSOR_MOVE_DELTA':
+                    await moveCursorDelta(data.dx, data.dy);
+                    break;
+                case 'SCROLL':
+                    if (page) {
+                        await page.mouse.wheel({ deltaY: data.deltaY }).catch(async () => {
+                            // Fallback to window scroll if mouse wheel fails
+                            await page.evaluate((dy) => window.scrollBy(0, dy), data.deltaY).catch(() => {});
+                        });
+                    }
                     break;
                 case 'VOLUME': {
                     const delta = data.key === '+' ? 0.1 : -0.1;
@@ -588,6 +631,10 @@ function getLocalIp() {
     const interfaces = os.networkInterfaces();
     const candidates = [];
     for (const name of Object.keys(interfaces)) {
+        const lowerName = name.toLowerCase();
+        if (lowerName.includes('warp') || lowerName.includes('tailscale') || lowerName.includes('vpn')) {
+            continue;
+        }
         for (const iface of interfaces[name]) {
             if (iface.family === 'IPv4' && !iface.internal) {
                 candidates.push(iface.address);
