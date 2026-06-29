@@ -17,8 +17,19 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+// Allow cross-origin fetch() requests from the Capacitor native app
+// (which runs internally from http://localhost) to reach the API routes.
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
+
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
+
 
 // Download the Android app: open http://<server-ip>:3000/app.apk on the phone.
 // release/ holds the latest committed build so any machine that pulls the
