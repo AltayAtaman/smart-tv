@@ -1,6 +1,7 @@
 const CLIENT_VERSION = '1.0.0';
 let socket;
 let laptopIP = localStorage.getItem('laptopIP') || window.location.hostname;
+let linuxMAC = localStorage.getItem('linuxMAC') || '';
 
 const CHANNELS = [
     { name: 'YouTube TV', url: 'https://www.youtube.com/tv', color: '#e62117', category: 'Streaming' },
@@ -21,20 +22,30 @@ const CHANNELS = [
 
 let isDiscovering = false;
 
+function updateStatus(status, text) {
+    const dot = document.getElementById('statusDot');
+    if (dot) {
+        dot.className = 'status-dot ' + status;
+    }
+    const titleEl = document.querySelector('h1');
+    if (titleEl && text) {
+        titleEl.textContent = text;
+        if (status === 'connected') titleEl.style.color = '';
+        else if (status === 'searching') titleEl.style.color = '#ffc107';
+        else if (status === 'disconnected') titleEl.style.color = '#e62117';
+    }
+}
+
 async function discoverServer() {
     if (isDiscovering) return false;
     isDiscovering = true;
     
     console.log("Checking if running in Capacitor...");
     const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-    const titleEl = document.querySelector('h1');
     
     if (isNative && window.Capacitor.Plugins && window.Capacitor.Plugins.mDNS) {
         console.log("Capacitor & mDNS plugin found. Starting discovery...");
-        if (titleEl) {
-            titleEl.textContent = 'Searching...';
-            titleEl.style.color = '#ffc107'; // Yellow
-        }
+        updateStatus('searching', 'Searching...');
         
         try {
             const mDNS = window.Capacitor.Plugins.mDNS;
@@ -56,9 +67,7 @@ async function discoverServer() {
                     laptopIP = ip;
                     localStorage.setItem('laptopIP', laptopIP);
                     
-                    if (titleEl) {
-                        titleEl.textContent = 'Smart TV';
-                    }
+                    updateStatus('connected', 'Smart TV');
                     isDiscovering = false;
                     initSocket();
                     return true;
@@ -72,10 +81,7 @@ async function discoverServer() {
         console.log("Not running in native Capacitor or mDNS plugin unavailable.");
     }
     
-    if (titleEl) {
-        titleEl.textContent = 'Smart TV';
-        titleEl.style.color = '#e62117'; // Red for disconnected
-    }
+    updateStatus('disconnected', 'Smart TV');
     isDiscovering = false;
     return false;
 }
@@ -83,7 +89,6 @@ async function discoverServer() {
 function initSocket() {
     if (socket) socket.disconnect();
     
-    // Connect to the specific IP if available, otherwise fallback to current host
     const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
     console.log(`Connecting to: ${connectionUrl}`);
     
@@ -94,46 +99,132 @@ function initSocket() {
 
     socket.on('connect', () => {
         console.log('Connected to Smart TV');
-        const titleEl = document.querySelector('h1');
-        if (titleEl) {
-            titleEl.style.color = '#28a745'; // Green
-            titleEl.textContent = 'Smart TV';
-        }
+        updateStatus('connected', 'Smart TV');
     });
 
     socket.on('disconnect', () => {
         console.log('Disconnected from Smart TV');
-        const titleEl = document.querySelector('h1');
-        if (titleEl) {
-            titleEl.style.color = '#e62117'; // Red
-            titleEl.textContent = 'Smart TV';
-        }
+        updateStatus('disconnected', 'Smart TV');
     });
 
     socket.on('connect_error', () => {
         console.log('Connection failed. Attempting mDNS discovery...');
-        const titleEl = document.querySelector('h1');
-        if (titleEl) {
-            titleEl.style.color = '#ffc107'; // Yellow
-        }
+        updateStatus('searching', 'Searching...');
         discoverServer();
     });
 }
 
-// Cursor mode: D-pad moves a mouse pointer on the TV instead of sending
-// arrow keys — for sites without keyboard navigation (e.g. Netflix)
+// Cursor mode: toggles between D-pad layout and relative Touchpad trackpad
 let cursorMode = localStorage.getItem('cursorMode') === 'true';
 
 function toggleCursorMode() {
     cursorMode = !cursorMode;
     localStorage.setItem('cursorMode', cursorMode);
     updateCursorButton();
+    updatePanelVisibility();
     if (!cursorMode) sendCommand('CURSOR_HIDE');
 }
 
 function updateCursorButton() {
     const btn = document.getElementById('cursorBtn');
     if (btn) btn.classList.toggle('active', cursorMode);
+}
+
+function updatePanelVisibility() {
+    const dpadPanel = document.getElementById('dpadPanel');
+    const touchpadPanel = document.getElementById('touchpadPanel');
+    if (cursorMode) {
+        if (dpadPanel) dpadPanel.classList.remove('active');
+        if (touchpadPanel) touchpadPanel.classList.add('active');
+    } else {
+        if (dpadPanel) dpadPanel.classList.add('active');
+        if (touchpadPanel) touchpadPanel.classList.remove('active');
+    }
+}
+
+function initTouchpad() {
+    const touchpad = document.getElementById('touchpad');
+    if (!touchpad) return;
+
+    let lastX = 0;
+    let lastY = 0;
+    let startX = 0;
+    let startY = 0;
+    let hasMoved = false;
+    let isScrolling = false;
+    let lastScrollY = 0;
+
+    const SENSITIVITY = 1.6;
+
+    touchpad.addEventListener('touchstart', (e) => {
+        const touches = e.touches;
+        if (touches.length === 1) {
+            lastX = touches[0].clientX;
+            lastY = touches[0].clientY;
+            startX = lastX;
+            startY = lastY;
+            hasMoved = false;
+            isScrolling = false;
+        } else if (touches.length === 2) {
+            isScrolling = true;
+            lastScrollY = (touches[0].clientY + touches[1].clientY) / 2;
+        }
+    }, { passive: true });
+
+    touchpad.addEventListener('touchmove', (e) => {
+        const touches = e.touches;
+        if (isScrolling && touches.length === 2) {
+            const currentScrollY = (touches[0].clientY + touches[1].clientY) / 2;
+            const deltaY = lastScrollY - currentScrollY; // scroll delta
+            
+            if (Math.abs(deltaY) > 1) {
+                socket.emit('command', { type: 'SCROLL', deltaY: Math.round(deltaY * 2.0) });
+                lastScrollY = currentScrollY;
+            }
+        } else if (touches.length === 1 && !isScrolling) {
+            const clientX = touches[0].clientX;
+            const clientY = touches[0].clientY;
+            const dx = (clientX - lastX) * SENSITIVITY;
+            const dy = (clientY - lastY) * SENSITIVITY;
+
+            if (Math.abs(clientX - startX) > 6 || Math.abs(clientY - startY) > 6) {
+                hasMoved = true;
+            }
+
+            socket.emit('command', { type: 'CURSOR_MOVE_DELTA', dx: Math.round(dx), dy: Math.round(dy) });
+
+            lastX = clientX;
+            lastY = clientY;
+        }
+    }, { passive: true });
+
+    touchpad.addEventListener('touchend', (e) => {
+        if (!hasMoved && !isScrolling) {
+            socket.emit('command', { type: 'CURSOR_CLICK' });
+            
+            // Touch ripple effect animation
+            const ripple = document.createElement('div');
+            ripple.className = 'touch-ripple';
+            Object.assign(ripple.style, {
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: '60px',
+                height: '60px',
+                background: 'rgba(255, 255, 255, 0.15)',
+                borderRadius: '50%',
+                transform: 'translate(-50%, -50%) scale(0)',
+                pointerEvents: 'none',
+                animation: 'rippleEffect 0.4s ease-out'
+            });
+            touchpad.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 400);
+
+            if ('vibrate' in navigator) navigator.vibrate(40);
+        }
+        isScrolling = false;
+        hasMoved = false;
+    }, { passive: true });
 }
 
 function dpad(key) {
@@ -152,7 +243,7 @@ function sendCommand(type, key = null) {
         return;
     }
     socket.emit('command', { type, key });
-    if ('vibrate' in navigator) navigator.vibrate(50);
+    if ('vibrate' in navigator) navigator.vibrate(35);
 }
 
 function sendText() {
@@ -173,19 +264,104 @@ function navigate(url, fullscreen = false) {
 // Settings Modal Logic
 function toggleSettings() {
     const modal = document.getElementById('settingsModal');
-    const ipInput = document.getElementById('ipInput');
-    ipInput.value = laptopIP;
+    document.getElementById('ipInput').value = laptopIP;
+    document.getElementById('macInput').value = linuxMAC;
+    document.getElementById('powerStatus').textContent = '';
     modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
 }
 
 function saveSettings() {
     const newIP = document.getElementById('ipInput').value.trim();
+    const newMAC = document.getElementById('macInput').value.trim();
     if (newIP) {
         laptopIP = newIP;
         localStorage.setItem('laptopIP', laptopIP);
-        toggleSettings();
-        initSocket();
     }
+    if (newMAC) {
+        linuxMAC = newMAC;
+        localStorage.setItem('linuxMAC', linuxMAC);
+    }
+    toggleSettings();
+    initSocket();
+}
+
+// Power Controls
+async function sleepMachine() {
+    const statusEl = document.getElementById('powerStatus');
+    const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
+    statusEl.textContent = 'Sending sleep command...';
+    statusEl.style.color = '#ffc107';
+    try {
+        await fetch(`${connectionUrl}/api/sleep`, { method: 'POST' });
+        statusEl.textContent = 'Machine is going to sleep. 😴';
+        statusEl.style.color = '#28a745';
+        updateStatus('disconnected', 'Smart TV');
+    } catch (e) {
+        statusEl.textContent = 'Failed: ' + e.message;
+        statusEl.style.color = '#e62117';
+    }
+}
+
+async function wakeMachine() {
+    const statusEl = document.getElementById('powerStatus');
+    if (!linuxMAC) {
+        statusEl.textContent = 'No MAC address set. Enter it above and Save first.';
+        statusEl.style.color = '#ffc107';
+        return;
+    }
+    statusEl.textContent = 'Sending magic packet... ⏰';
+    statusEl.style.color = '#ffc107';
+
+    // Derive subnet broadcast from stored IP (e.g. 192.168.1.5 → 192.168.1.255)
+    const ipParts = laptopIP.replace(/^https?:\/\//, '').split(':')[0].split('.');
+    const broadcast = ipParts.length === 4
+        ? `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.255`
+        : '255.255.255.255';
+
+    const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+
+    if (isNative && window.Capacitor.Plugins && window.Capacitor.Plugins.WakeOnLan) {
+        // Native path: send UDP magic packet directly from Android (works even when server is off)
+        try {
+            await window.Capacitor.Plugins.WakeOnLan.wake({ mac: linuxMAC, broadcast });
+            statusEl.textContent = `Magic packet sent to ${broadcast}! Waiting for machine to wake...`;
+            statusEl.style.color = '#28a745';
+        } catch (e) {
+            statusEl.textContent = 'WoL failed: ' + e.message;
+            statusEl.style.color = '#e62117';
+            return;
+        }
+    } else {
+        // Browser fallback: relay through the server (server must be running)
+        const connectionUrl = laptopIP.startsWith('http') ? laptopIP : `http://${laptopIP}:3000`;
+        try {
+            const res = await fetch(`${connectionUrl}/api/wake`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mac: linuxMAC, broadcast })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            statusEl.textContent = 'Magic packet sent via server relay!';
+            statusEl.style.color = '#28a745';
+        } catch (e) {
+            statusEl.textContent = 'Server offline — install the APK to wake without a relay.';
+            statusEl.style.color = '#e62117';
+            return;
+        }
+    }
+
+    // Auto-retry connection every 3s for up to 30s
+    let attempts = 0;
+    const retryConnect = setInterval(() => {
+        attempts++;
+        initSocket();
+        if (attempts >= 10) {
+            clearInterval(retryConnect);
+            statusEl.textContent = 'Could not reconnect. Machine may need more time.';
+            statusEl.style.color = '#ffc107';
+        }
+    }, 3000);
 }
 
 // Channels Panel Logic
@@ -196,6 +372,7 @@ function toggleChannels() {
 
 function renderChannels() {
     const list = document.getElementById('channelList');
+    list.innerHTML = ''; // clear first
     let currentCategory = null;
     CHANNELS.forEach((channel) => {
         if (channel.category !== currentCategory) {
@@ -219,6 +396,8 @@ function renderChannels() {
 
 renderChannels();
 updateCursorButton();
+updatePanelVisibility();
+initTouchpad();
 
 // Initial connection
 (async () => {
@@ -306,11 +485,7 @@ async function checkServerUpdate() {
                 const updateRes = await fetch(`${connectionUrl}/api/update`, { method: 'POST' });
                 if (!updateRes.ok) throw new Error('Update call failed');
                 
-                const titleEl = document.querySelector('h1');
-                if (titleEl) {
-                    titleEl.textContent = 'Updating...';
-                    titleEl.style.color = '#ffc107';
-                }
+                updateStatus('searching', 'Updating...');
             }
         } else if (data.git && data.git.error) {
             statusEl.textContent = `Git error: ${data.git.error}`;

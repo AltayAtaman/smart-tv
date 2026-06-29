@@ -27,6 +27,9 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(express.json());
+
+
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -147,6 +150,44 @@ app.post('/api/update', async (req, res) => {
         process.exit(0);
     } catch (error) {
         console.error('Auto-update: Update failed:', error.message);
+    }
+});
+
+// Sleep: suspend the Linux machine
+app.post('/api/sleep', (req, res) => {
+    res.json({ status: 'sleeping' });
+    setTimeout(() => {
+        exec('systemctl suspend', (err) => {
+            if (err) console.error('Sleep failed:', err.message);
+        });
+    }, 500); // short delay so the response reaches the client first
+});
+
+// Wake relay: send a WoL magic packet to a target MAC address
+// Used as a fallback for browser clients; the native APK sends WoL directly.
+app.post('/api/wake', (req, res) => {
+    const { mac, broadcast = '255.255.255.255' } = req.body || {};
+    if (!mac) return res.status(400).json({ error: 'MAC address required' });
+    try {
+        const hex = mac.split(/[:\-]/);
+        if (hex.length !== 6) throw new Error('Invalid MAC address');
+        const macBytes = hex.map(h => parseInt(h, 16));
+        const packet = Buffer.alloc(6 + 16 * 6);
+        packet.fill(0xff, 0, 6);
+        for (let i = 6; i < packet.length; i += 6) {
+            macBytes.forEach((b, j) => packet.writeUInt8(b, i + j));
+        }
+        const dgram = require('dgram');
+        const socket = dgram.createSocket('udp4');
+        socket.once('listening', () => socket.setBroadcast(true));
+        socket.send(packet, 0, packet.length, 9, broadcast, (err) => {
+            socket.close();
+            if (err) return res.status(500).json({ error: err.message });
+            console.log(`WoL magic packet sent to ${mac} via ${broadcast}`);
+            res.json({ status: 'sent', mac, broadcast });
+        });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
     }
 });
 

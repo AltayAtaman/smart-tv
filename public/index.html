@@ -4,24 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart TV Remote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1a1a1a">
+    <meta name="theme-color" content="#0f0f16">
 </head>
 <body>
     <div class="remote-container">
         <header>
-            <button id="cursorBtn" class="btn-cursor" onclick="toggleCursorMode()">🖱️</button>
-            <h1>Smart TV</h1>
-            <button class="btn-settings" onclick="toggleSettings()">⚙</button>
+            <button id="cursorBtn" class="btn-cursor" onclick="toggleCursorMode()" title="Toggle Touchpad Mode">🖱️</button>
+            <div class="header-title">
+                <h1>Smart TV</h1>
+                <span id="statusDot" class="status-dot"></span>
+            </div>
+            <button class="btn-settings" onclick="toggleSettings()" title="Settings">⚙</button>
         </header>
 
         <div id="settingsModal" class="modal">
             <div class="modal-content">
                 <h2>Connection Settings</h2>
-                <p>Enter Linux Laptop IP:</p>
-                <input type="text" id="ipInput" placeholder="e.g. 192.168.1.23">
+                <div class="input-group">
+                    <label for="ipInput">Linux Laptop IP</label>
+                    <input type="text" id="ipInput" placeholder="e.g. 192.168.1.23">
+                </div>
+                <div class="input-group">
+                    <label for="macInput">Linux MAC Address (for Wake)</label>
+                    <input type="text" id="macInput" placeholder="e.g. 3c:91:80:6f:75:a7">
+                </div>
                 
+                <div class="settings-divider"></div>
+
+                <h2>Power Controls</h2>
+                <div class="power-controls">
+                    <button id="btnWake" class="btn-power btn-wake" onclick="wakeMachine()">⏰ Wake</button>
+                    <button id="btnSleep" class="btn-power btn-sleep" onclick="sleepMachine()">😴 Sleep</button>
+                </div>
+                <div id="powerStatus" class="update-status"></div>
+
                 <div class="settings-divider"></div>
                 
                 <h2>System Updates</h2>
@@ -46,36 +67,64 @@
             </div>
         </div>
 
-        <div class="d-pad-container">
-            <button class="btn up" onclick="dpad('ArrowUp')">▲</button>
-            <div class="middle-row">
-                <button class="btn left" onclick="dpad('ArrowLeft')">◀</button>
-                <button class="btn ok" onclick="dpad('Enter')">OK</button>
-                <button class="btn right" onclick="dpad('ArrowRight')">▶</button>
+        <!-- Navigation Control Panels (Toggled by Cursor Mode) -->
+        <div class="panel-container">
+            <!-- D-Pad Control Panel -->
+            <div id="dpadPanel" class="control-panel active">
+                <div class="d-pad-container">
+                    <button class="btn up" onclick="dpad('ArrowUp')">▲</button>
+                    <div class="middle-row">
+                        <button class="btn left" onclick="dpad('ArrowLeft')">◀</button>
+                        <button class="btn ok" onclick="dpad('Enter')">OK</button>
+                        <button class="btn right" onclick="dpad('ArrowRight')">▶</button>
+                    </div>
+                    <button class="btn down" onclick="dpad('ArrowDown')">▼</button>
+                </div>
             </div>
-            <button class="btn down" onclick="dpad('ArrowDown')">▼</button>
+
+            <!-- Touchpad Trackpad Control Panel -->
+            <div id="touchpadPanel" class="control-panel">
+                <div id="touchpad" class="touchpad-area">
+                    <div class="touchpad-grid"></div>
+                    <div class="touchpad-label">
+                        <div class="touchpad-icon">🎯</div>
+                        <div class="touchpad-title">Trackpad Mode</div>
+                        <div class="touchpad-subtitle">Swipe to move • Tap to click<br>2-finger swipe to scroll</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <button class="btn-back" onclick="sendCommand('BACK')">⬅ Back</button>
-
-        <div class="volume-controls">
-            <button class="btn-volume" onclick="sendCommand('VOLUME', '-')">🔉 −</button>
-            <button class="btn-volume" onclick="sendCommand('VOLUME', '+')">🔊 +</button>
+        <!-- Global Action Rows -->
+        <div class="action-grid">
+            <button class="btn-back" onclick="sendCommand('BACK')">⬅ Back</button>
+            <button class="btn-launch tv" onclick="toggleChannels()">📺 Channels</button>
         </div>
 
-        <div class="playback-controls">
-            <button class="btn-secondary" onclick="sendCommand('KEY_PRESS', 'Backspace')">Del ⌫</button>
-            <button class="btn-secondary" onclick="sendCommand('RELOAD')">Reload</button>
+        <div class="control-card volume-card">
+            <h3>Volume Control</h3>
+            <div class="volume-controls">
+                <button class="btn-secondary btn-mute" onclick="sendCommand('KEY_PRESS', 'm')" title="Mute">🔇</button>
+                <button class="btn-volume" onclick="sendCommand('VOLUME', '-')" title="Volume Down">🔉 −</button>
+                <button class="btn-volume" onclick="sendCommand('VOLUME', '+')" title="Volume Up">🔊 +</button>
+            </div>
+        </div>
+
+        <div class="control-card media-card">
+            <h3>Media Controls</h3>
+            <div class="playback-controls">
+                <button class="btn-media" onclick="sendCommand('KEY_PRESS', 'ArrowLeft')" title="Rewind 10s">⏪</button>
+                <button class="btn-media btn-play" onclick="sendCommand('KEY_PRESS', 'Space')" title="Play / Pause">⏯️</button>
+                <button class="btn-media" onclick="sendCommand('KEY_PRESS', 'ArrowRight')" title="Forward 10s">⏩</button>
+                <button class="btn-media btn-del" onclick="sendCommand('KEY_PRESS', 'Backspace')" title="Delete ⌫">⌫</button>
+                <button class="btn-media btn-reload" onclick="sendCommand('RELOAD')" title="Reload TV">🔄</button>
+            </div>
         </div>
 
         <form class="search-container" onsubmit="event.preventDefault(); sendText();">
-            <input type="text" id="searchInput" placeholder="Search / Type..." autocomplete="off">
+            <input type="text" id="searchInput" placeholder="Search / Type text..." autocomplete="off">
             <button type="submit" class="btn-action">Send</button>
         </form>
-
-        <div class="quick-launch">
-            <button class="btn-launch tv" onclick="toggleChannels()">📺 Channels</button>
-        </div>
 
         <div id="channelsModal" class="modal">
             <div class="modal-content">
