@@ -496,7 +496,24 @@ io.on('connection', (socket) => {
                     if (data.fullscreen) {
                         // Fire immediately in case the player is already there
                         await enterFullscreen();
-                        // Then keep retrying for up to 20s for late-loading players (e.g. Show TV)
+
+                        // After 2s, double-click the center of the screen to trigger the
+                        // player's own native fullscreen (e.g. Show TV needs this dblclick)
+                        setTimeout(async () => {
+                            try {
+                                const vp = page.viewport() || { width: 1920, height: 1080 };
+                                const cx = Math.round(vp.width / 2);
+                                const cy = Math.round(vp.height / 2);
+                                await page.mouse.click(cx, cy, { clickCount: 2 });
+                                console.log(`Auto double-click at center (${cx},${cy}) to trigger player fullscreen`);
+                                // Re-apply CSS fullscreen after the click in case it shifts layout
+                                await enterFullscreen();
+                            } catch (e) {
+                                console.error('Auto double-click failed:', e.message);
+                            }
+                        }, 2000);
+
+                        // Keep retrying CSS fullscreen for up to 20s for late-loading players
                         let retries = 0;
                         const fsRetry = setInterval(async () => {
                             retries++;
