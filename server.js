@@ -358,36 +358,48 @@ async function enterFullscreen() {
                 // Ignore tiny/hidden elements (ad trackers, not-yet-loaded players)
                 if (!best || bestArea < 200 * 150) return;
 
-                // position:fixed is clipped by transformed ancestors; neutralize them
+                // Neutralize transforms AND overflow:hidden on all ancestors.
+                // overflow:hidden on a parent clips position:fixed children in many browsers.
                 let p = best.parentElement;
                 while (p && p !== document.body) {
                     const cs = getComputedStyle(p);
                     if (cs.transform !== 'none' || cs.filter !== 'none' || cs.perspective !== 'none') {
-                        p.style.transform = 'none';
-                        p.style.filter = 'none';
-                        p.style.perspective = 'none';
+                        p.style.setProperty('transform', 'none', 'important');
+                        p.style.setProperty('filter', 'none', 'important');
+                        p.style.setProperty('perspective', 'none', 'important');
+                    }
+                    if (cs.overflow === 'hidden' || cs.overflow === 'clip' ||
+                        cs.overflowX === 'hidden' || cs.overflowY === 'hidden') {
+                        p.style.setProperty('overflow', 'visible', 'important');
                     }
                     p = p.parentElement;
                 }
-                Object.assign(best.style, {
-                    position: 'fixed',
-                    top: '0',
-                    left: '0',
-                    width: '100vw',
-                    height: '100vh',
-                    zIndex: '2147483647',
-                    background: '#000'
-                });
+
+                // Use setProperty with 'important' so site JS cannot override us
+                // with plain style assignments (e.g. el.style.width = '...' loses to !important)
+                best.style.setProperty('position', 'fixed', 'important');
+                best.style.setProperty('top', '0', 'important');
+                best.style.setProperty('left', '0', 'important');
+                best.style.setProperty('width', '100vw', 'important');
+                best.style.setProperty('height', '100vh', 'important');
+                best.style.setProperty('z-index', '2147483647', 'important');
+                best.style.setProperty('background', '#000', 'important');
+                best.style.setProperty('margin', '0', 'important');
+                best.style.setProperty('padding', '0', 'important');
+                best.style.setProperty('border', 'none', 'important');
+                best.style.setProperty('max-width', 'none', 'important');
+                best.style.setProperty('max-height', 'none', 'important');
                 best.removeAttribute('width');
                 best.removeAttribute('height');
-                document.documentElement.style.overflow = 'hidden';
-                document.body.style.overflow = 'hidden';
+                document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+                document.body.style.setProperty('overflow', 'hidden', 'important');
                 if (best.tagName === 'VIDEO' && best.paused) {
                     best.play().catch(() => {});
                 }
             };
 
-            window.__fsWatcher = setInterval(maximize, 2000);
+            // Run every 500ms so we re-apply faster than site JS can fight back
+            window.__fsWatcher = setInterval(maximize, 500);
             maximize();
         });
         console.log('Fullscreen watcher installed');
